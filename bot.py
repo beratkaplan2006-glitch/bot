@@ -22,11 +22,10 @@ def send_telegram(msg):
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
 def get_user_id(username):
-url = f"https://api.twitter.com/2/users/by/username/{username}"
-headers = {"Authorization": f"Bearer {BEARER_TOKEN}"}
-r = requests.get(url, headers=headers).json()
-return r["data"]["id"]
-
+    url = f"https://api.twitter.com/2/users/by/username/{username}"
+    headers = {"Authorization": f"Bearer {BEARER_TOKEN}"}
+    r = requests.get(url, headers=headers).json()
+    return r["data"]["id"]
 def get_tweets(user_id):
 url = f"https://api.twitter.com/2/users/{user_id}/tweets"
 headers = {"Authorization": f"Bearer {BEARER_TOKEN}"}
