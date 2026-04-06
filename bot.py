@@ -18,8 +18,8 @@ COOLDOWN_MINUTES = 10
 last_alert_time = {}
 
 def send_telegram(msg):
-url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
 def get_user_id(username):
 url = f"https://api.twitter.com/2/users/by/username/{username}"
