@@ -35,7 +35,7 @@ while True:
         # 🔥 API çağrısı
         url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={API_KEY}"
         
-        r = requests.get(url, timeout=10)
+        r = requests.get(url, timeout=20)
         data = r.json()
 
         for stock in data:
