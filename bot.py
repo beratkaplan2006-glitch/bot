@@ -5,7 +5,7 @@ import os
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-API_KEY = "demo"  # sonra ücretsiz key al
+API_KEY = os.getenv("la4EKhsOSEJHtehhM518wRlVUseYv15Y")
 
 def send(msg):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
