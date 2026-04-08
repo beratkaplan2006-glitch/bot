@@ -25,7 +25,7 @@ def get_gainers():
 
         if r.status_code == 429:
             print("Rate limit! Bekleniyor...")
-            time.sleep(120)
+            time.sleep(300)
             return []
 
         if r.status_code != 200:
@@ -91,7 +91,7 @@ while True:
             sent.add(sym)
 
         # 🔥 EN KRİTİK SATIR
-        time.sleep(90)
+        time.sleep(180)
 
     except Exception as e:
         print("Loop hata:", e)
