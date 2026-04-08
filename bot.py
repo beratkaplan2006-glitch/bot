@@ -44,6 +44,7 @@ def get_gainers():
 
     try:
         r = requests.get(url, headers=headers, timeout=10)
+        print(r.text[:500])
         soup = BeautifulSoup(r.text, "html.parser")
 
         rows = soup.select("table tbody tr")
