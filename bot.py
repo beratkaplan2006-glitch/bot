@@ -130,7 +130,7 @@ while True:
                 if now_ts - sent[symbol] < 1800:
                     continue
 
-            if change and change > 1:
+            if change and change > 0.1:
                 msg = f"""🔥 ULTRA SCANNER
 💰 ${symbol}
 📈 Change: %{round(change,2)}
