@@ -10,36 +10,50 @@ API_KEY = os.getenv("API_KEY")
 def send(msg):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
-    except:
-        print("Telegram hata")
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=10)
+    except Exception as e:
+        print("Telegram hata:", e)
 
-# 🔁 tekrar kontrol (zaman bazlı)
+# 🔁 tekrar kontrol
 sent = {}
 
 # 🗓 günlük reset
 last_reset_day = datetime.utcnow().date()
 
-def fetch_fmp():
-    url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={API_KEY}"
-    
-    for i in range(3):
+# 🔥 GÜÇLÜ FETCH (timeout + retry + json koruma)
+def fetch_json(url, retries=3, delay=5):
+    for i in range(retries):
         try:
             r = requests.get(url, timeout=20)
-            return r.json()
-        except:
-            print("FMP retry...")
-            time.sleep(5)
-    return []
+
+            if r.status_code != 200:
+                print("Status hata:", r.status_code)
+                time.sleep(delay)
+                continue
+
+            try:
+                return r.json()
+            except:
+                print("JSON parse hata")
+                return None
+
+        except Exception as e:
+            print("Fetch hata:", e)
+            time.sleep(delay)
+
+    return None
+
+def fetch_fmp():
+    url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={API_KEY}"
+    return fetch_json(url)
 
 def fetch_yahoo():
+    url = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=20&scrIds=day_gainers"
+    data = fetch_json(url)
+
     try:
-        url = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=20&scrIds=day_gainers"
-        r = requests.get(url, timeout=15)
-        data = r.json()
         return data["finance"]["result"][0]["quotes"]
     except:
-        print("Yahoo fallback hata")
         return []
 
 last_heartbeat = datetime.utcnow()
@@ -51,7 +65,7 @@ while True:
 
         # 🔥 başlangıç
         if not started:
-            send("🚀 ULTRA SCANNER AKTİF")
+            send("🚀 ULTRA SCANNER AKTİF (STABLE)")
             started = True
 
         # 🟢 heartbeat
@@ -68,7 +82,7 @@ while True:
 
         stocks = []
 
-        # 🔥 1. FMP
+        # 🔥 FMP
         fmp_data = fetch_fmp()
 
         if isinstance(fmp_data, list) and len(fmp_data) > 0:
@@ -82,9 +96,10 @@ while True:
                 except:
                     continue
 
-        # 🔄 fallback Yahoo
+        # 🔄 Yahoo fallback
         if not stocks:
             yahoo_data = fetch_yahoo()
+
             for s in yahoo_data:
                 try:
                     symbol = s.get("symbol")
@@ -95,7 +110,7 @@ while True:
                 except:
                     continue
 
-        # 🔥 filtre + tekrar sistemi
+        # 🔥 filtre + tekrar
         for symbol, change in stocks:
 
             if not symbol:
@@ -108,7 +123,7 @@ while True:
                 if now_ts - sent[symbol] < 1800:
                     continue
 
-            if change > 1:
+            if change and change > 1:
                 msg = f"""🔥 ULTRA SCANNER
 💰 ${symbol}
 📈 Change: %{round(change,2)}
