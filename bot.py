@@ -76,7 +76,7 @@ def get_gainers():
                 change = float(change_text)
 
                 # 🔥 NASDAQ doğrulama
-                if symbol in VALID_TICKERS and change > 5:
+                if symbol in VALID_TICKERS and change > 2:
                     stocks.append((symbol, change))
 
             except:
