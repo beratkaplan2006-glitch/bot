@@ -122,7 +122,7 @@ while True:
                 prob = pump_probability(score)
 
                 # 🔥 sinyal
-                if score >= 40:
+                if score >= 0:
                     msg = f"""🚨 AI SIGNAL
 💰 ${symbol}
 🧠 Skor: {score}/100
