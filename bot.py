@@ -174,3 +174,28 @@ while True:
     except Exception as e:
         print("HATA:", e)
         time.sleep(30)
+        
+        import requests
+import os
+
+FMP_KEY = os.getenv("API_KEY")
+POLYGON_KEY = os.getenv("POLYGON_KEY")
+
+print("FMP KEY:", FMP_KEY)
+print("POLYGON KEY:", POLYGON_KEY)
+
+# FMP test
+try:
+    r = requests.get(f"https://financialmodelingprep.com/api/v3/stock_market/actives?apikey={FMP_KEY}")
+    print("FMP status:", r.status_code)
+    print("FMP data:", r.text[:200])
+except Exception as e:
+    print("FMP error:", e)
+
+# Polygon test
+try:
+    r = requests.get(f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers?apiKey={POLYGON_KEY}")
+    print("Polygon status:", r.status_code)
+    print("Polygon data:", r.text[:200])
+except Exception as e:
+    print("Polygon error:", e)
