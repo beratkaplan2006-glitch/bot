@@ -20,22 +20,27 @@ sent = {}
 # 🗓 günlük reset
 last_reset_day = datetime.utcnow().date()
 
-# 🔥 GÜÇLÜ FETCH (timeout + retry + json koruma)
+# 🔄 kaynak değiştirici (rate limit azaltır)
+use_fmp = True
+
+# 🔥 güçlü fetch
 def fetch_json(url, retries=3, delay=5):
     for i in range(retries):
         try:
             r = requests.get(url, timeout=20)
+
+            # 🚨 RATE LIMIT
+            if r.status_code == 429:
+                print("RATE LIMIT! 2 dk bekleniyor...")
+                time.sleep(120)
+                continue
 
             if r.status_code != 200:
                 print("Status hata:", r.status_code)
                 time.sleep(delay)
                 continue
 
-            try:
-                return r.json()
-            except:
-                print("JSON parse hata")
-                return None
+            return r.json()
 
         except Exception as e:
             print("Fetch hata:", e)
@@ -63,9 +68,9 @@ while True:
     try:
         now = datetime.utcnow()
 
-        # 🔥 başlangıç
+        # 🚀 başlangıç mesajı
         if not started:
-            send("🚀 ULTRA SCANNER AKTİF (STABLE)")
+            send("🚀 ULTRA SCANNER AKTİF (STABLE v2)")
             started = True
 
         # 🟢 heartbeat
@@ -82,35 +87,37 @@ while True:
 
         stocks = []
 
-        # 🔥 FMP
-        fmp_data = fetch_fmp()
+        # 🔄 sırayla kaynak kullan (rate limit çözümü)
+        if use_fmp:
+            print("FMP kullanılıyor")
+            data = fetch_fmp()
+            use_fmp = False
 
-        if isinstance(fmp_data, list) and len(fmp_data) > 0:
-            for s in fmp_data:
-                try:
-                    symbol = s.get("symbol")
-                    change = float(s.get("changesPercentage", 0))
+            if isinstance(data, list):
+                for s in data:
+                    try:
+                        symbol = s.get("symbol")
+                        change = float(s.get("changesPercentage", 0))
+                        if symbol:
+                            stocks.append((symbol, change))
+                    except:
+                        continue
 
-                    if symbol:
-                        stocks.append((symbol, change))
-                except:
-                    continue
+        else:
+            print("Yahoo kullanılıyor")
+            data = fetch_yahoo()
+            use_fmp = True
 
-        # 🔄 Yahoo fallback
-        if not stocks:
-            yahoo_data = fetch_yahoo()
-
-            for s in yahoo_data:
+            for s in data:
                 try:
                     symbol = s.get("symbol")
                     change = s.get("regularMarketChangePercent", 0)
-
                     if symbol:
                         stocks.append((symbol, change))
                 except:
                     continue
 
-        # 🔥 filtre + tekrar
+        # 🔥 sinyal sistemi
         for symbol, change in stocks:
 
             if not symbol:
@@ -118,7 +125,7 @@ while True:
 
             now_ts = time.time()
 
-            # ⏱ 30 dk kuralı
+            # ⏱ 30 dk tekrar kuralı
             if symbol in sent:
                 if now_ts - sent[symbol] < 1800:
                     continue
@@ -131,7 +138,8 @@ while True:
                 send(msg)
                 sent[symbol] = now_ts
 
-        time.sleep(60)
+        # 🔥 RATE LIMIT FIX (EN ÖNEMLİ)
+        time.sleep(120)
 
     except Exception as e:
         print("GENEL HATA:", e)
