@@ -13,10 +13,8 @@ def send(msg):
     except:
         print("Telegram hata")
 
-# 🔥 başlangıç
 send("⚡ SCANNER BOT AKTİF")
 
-# ⏱ heartbeat
 last_heartbeat = datetime.utcnow()
 
 def get_gainers():
@@ -25,18 +23,18 @@ def get_gainers():
     try:
         r = requests.get(url, timeout=10)
 
-        if r.status_code != 200:
-            print("API status hata:", r.status_code)
+        if r.status_code == 429:
+            print("Rate limit! Bekleniyor...")
+            time.sleep(120)
             return []
 
-        try:
-            data = r.json()
-        except:
-            print("JSON parse hatası")
+        if r.status_code != 200:
+            print("API hata:", r.status_code)
             return []
+
+        data = r.json()
 
         if "finance" not in data or not data["finance"]["result"]:
-            print("Boş veri geldi")
             return []
 
         results = data["finance"]["result"][0]["quotes"]
@@ -50,7 +48,6 @@ def get_gainers():
                 volume = s.get("regularMarketVolume", 0)
                 symbol = s.get("symbol")
 
-                # 🔥 filtre
                 if price and change and symbol:
                     if price < 20 and change > 10:
                         stocks.append((symbol, change, volume))
@@ -61,7 +58,7 @@ def get_gainers():
         return stocks
 
     except Exception as e:
-        print("GENEL API HATA:", e)
+        print("API hata:", e)
         return []
 
 sent = set()
@@ -70,7 +67,6 @@ while True:
     try:
         now = datetime.utcnow()
 
-        # 🟢 heartbeat 60 dk
         if now - last_heartbeat >= timedelta(minutes=60):
             send("🟢 SCANNER AKTİF (60 dk kontrol)")
             last_heartbeat = now
@@ -78,7 +74,7 @@ while True:
         stocks = get_gainers()
 
         if not stocks:
-            print("Hisse yok (normal olabilir)")
+            print("Hisse yok (normal)")
 
         for sym, change, vol in stocks:
 
@@ -94,8 +90,9 @@ while True:
             send(msg)
             sent.add(sym)
 
+        # 🔥 EN KRİTİK SATIR
         time.sleep(90)
 
     except Exception as e:
-        print("LOOP HATA:", e)
-        time.sleep(10)
+        print("Loop hata:", e)
+        time.sleep(30)
