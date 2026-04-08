@@ -20,46 +20,54 @@ sent = {}
 # 🗓 günlük reset
 last_reset_day = datetime.utcnow().date()
 
-# 🔄 kaynak değiştirici (rate limit azaltır)
-use_fmp = True
+# 📊 hacim cache
+volume_cache = {}
 
-# 🔥 güçlü fetch
-def fetch_json(url, retries=3, delay=5):
-    for i in range(retries):
+# 🧠 AI SKOR
+def ai_score(change, vol_ratio):
+    score = 0
+
+    # 📈 fiyat etkisi
+    if change > 1:
+        score += 10
+    if change > 3:
+        score += 20
+    if change > 5:
+        score += 30
+
+    # 📊 hacim etkisi
+    if vol_ratio > 1.5:
+        score += 20
+    if vol_ratio > 2:
+        score += 30
+    if vol_ratio > 3:
+        score += 40
+
+    return min(score, 100)
+
+# 📊 pump ihtimali
+def pump_probability(score):
+    return min(100, int(score * 1.2))
+
+def fetch_data():
+    url = f"https://financialmodelingprep.com/api/v3/stock_market/actives?apikey={API_KEY}"
+    
+    for _ in range(3):
         try:
             r = requests.get(url, timeout=20)
 
-            # 🚨 RATE LIMIT
             if r.status_code == 429:
-                print("RATE LIMIT! 2 dk bekleniyor...")
+                print("Rate limit, bekleniyor...")
                 time.sleep(120)
-                continue
-
-            if r.status_code != 200:
-                print("Status hata:", r.status_code)
-                time.sleep(delay)
                 continue
 
             return r.json()
 
         except Exception as e:
-            print("Fetch hata:", e)
-            time.sleep(delay)
+            print("API hata:", e)
+            time.sleep(5)
 
-    return None
-
-def fetch_fmp():
-    url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={API_KEY}"
-    return fetch_json(url)
-
-def fetch_yahoo():
-    url = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=20&scrIds=day_gainers"
-    data = fetch_json(url)
-
-    try:
-        return data["finance"]["result"][0]["quotes"]
-    except:
-        return []
+    return []
 
 last_heartbeat = datetime.utcnow()
 started = False
@@ -68,9 +76,9 @@ while True:
     try:
         now = datetime.utcnow()
 
-        # 🚀 başlangıç mesajı
+        # 🚀 başlangıç
         if not started:
-            send("🚀 ULTRA SCANNER AKTİF (STABLE v2)")
+            send("🚀 AI VOLUME SCANNER AKTİF")
             started = True
 
         # 🟢 heartbeat
@@ -78,67 +86,56 @@ while True:
             send("🟢 BOT AKTİF (60 dk)")
             last_heartbeat = now
 
-        # 🗓 günlük reset
+        # 🗓 reset
         current_day = datetime.utcnow().date()
         if current_day != last_reset_day:
             sent.clear()
+            volume_cache.clear()
             print("Yeni gün reset")
             last_reset_day = current_day
 
-        stocks = []
+        data = fetch_data()
 
-        # 🔄 sırayla kaynak kullan (rate limit çözümü)
-        if use_fmp:
-            print("FMP kullanılıyor")
-            data = fetch_fmp()
-            use_fmp = False
+        for stock in data:
+            try:
+                symbol = stock.get("symbol")
+                volume = stock.get("volume", 0)
+                change = stock.get("changesPercentage", 0)
 
-            if isinstance(data, list):
-                for s in data:
-                    try:
-                        symbol = s.get("symbol")
-                        change = float(s.get("changesPercentage", 0))
-                        if symbol:
-                            stocks.append((symbol, change))
-                    except:
+                if not symbol or volume == 0:
+                    continue
+
+                prev_vol = volume_cache.get(symbol, volume)
+
+                vol_ratio = volume / prev_vol if prev_vol > 0 else 1
+
+                volume_cache[symbol] = volume
+
+                now_ts = time.time()
+
+                if symbol in sent:
+                    if now_ts - sent[symbol] < 1800:
                         continue
 
-        else:
-            print("Yahoo kullanılıyor")
-            data = fetch_yahoo()
-            use_fmp = True
+                # 🧠 AI hesap
+                score = ai_score(change, vol_ratio)
+                prob = pump_probability(score)
 
-            for s in data:
-                try:
-                    symbol = s.get("symbol")
-                    change = s.get("regularMarketChangePercent", 0)
-                    if symbol:
-                        stocks.append((symbol, change))
-                except:
-                    continue
-
-        # 🔥 sinyal sistemi
-        for symbol, change in stocks:
-
-            if not symbol:
-                continue
-
-            now_ts = time.time()
-
-            # ⏱ 30 dk tekrar kuralı
-            if symbol in sent:
-                if now_ts - sent[symbol] < 1800:
-                    continue
-
-            if change and change > 0.1:
-                msg = f"""🔥 ULTRA SCANNER
+                # 🔥 sinyal
+                if score >= 40:
+                    msg = f"""🚨 AI SIGNAL
 💰 ${symbol}
+🧠 Skor: {score}/100
+📊 Pump: %{prob}
+📊 Volume x{round(vol_ratio,2)}
 📈 Change: %{round(change,2)}
 """
-                send(msg)
-                sent[symbol] = now_ts
+                    send(msg)
+                    sent[symbol] = now_ts
 
-        # 🔥 RATE LIMIT FIX (EN ÖNEMLİ)
+            except:
+                continue
+
         time.sleep(120)
 
     except Exception as e:
