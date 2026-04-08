@@ -141,3 +141,4 @@ while True:
     except Exception as e:
         print("GENEL HATA:", e)
         time.sleep(30)
+        
