@@ -14,11 +14,7 @@ def send(msg):
     except:
         print("Telegram hata")
 
-send("⚡ SCANNER BOT AKTİF (PRO)")
-
-last_heartbeat = datetime.utcnow()
-
-# 🔥 NASDAQ LİSTE
+# 🔥 NASDAQ
 def load_nasdaq():
     url = "https://raw.githubusercontent.com/datasets/nasdaq-listings/master/data/nasdaq-listed-symbols.csv"
     
@@ -35,22 +31,16 @@ def load_nasdaq():
                 if ticker:
                     tickers.add(ticker)
 
-        print("NASDAQ yüklendi:", len(tickers))
         return tickers
 
-    except Exception as e:
-        print("NASDAQ yüklenemedi:", e)
+    except:
         return set()
 
 VALID_TICKERS = load_nasdaq()
 
-# 🔥 SCRAPER
 def get_gainers():
     url = "https://www.investing.com/equities/top-stock-gainers"
-
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    headers = {"User-Agent": "Mozilla/5.0"}
 
     try:
         r = requests.get(url, headers=headers, timeout=10)
@@ -63,11 +53,9 @@ def get_gainers():
         for row in rows[:20]:
             try:
                 cols = row.find_all("td")
-
                 name = cols[1].text.strip()
                 change_text = cols[4].text.strip().replace("%", "").replace(",", "")
 
-                # ticker çek
                 if "(" in name and ")" in name:
                     symbol = name.split("(")[-1].replace(")", "").strip()
                 else:
@@ -75,8 +63,7 @@ def get_gainers():
 
                 change = float(change_text)
 
-                # 🔥 NASDAQ doğrulama
-                if symbol in VALID_TICKERS and change > 2:
+                if symbol in VALID_TICKERS and change > 1:
                     stocks.append((symbol, change))
 
             except:
@@ -84,15 +71,21 @@ def get_gainers():
 
         return stocks
 
-    except Exception as e:
-        print("SCRAPE HATA:", e)
+    except:
         return []
 
 sent = set()
+last_heartbeat = datetime.utcnow()
+started = False  # 🔥 garanti başlangıç kontrolü
 
 while True:
     try:
         now = datetime.utcnow()
+
+        # 🔥 GARANTİ BAŞLANGIÇ MESAJI
+        if not started:
+            send("⚡ SCANNER BOT AKTİF (PRO)")
+            started = True
 
         # 🟢 HEARTBEAT
         if now - last_heartbeat >= timedelta(minutes=60):
@@ -101,11 +94,7 @@ while True:
 
         stocks = get_gainers()
 
-        if not stocks:
-            print("Uygun hisse yok (normal)")
-
         for sym, change in stocks:
-
             if sym in sent:
                 continue
 
@@ -113,12 +102,11 @@ while True:
 💰 ${sym}
 📈 Change: %{round(change,2)}
 """
-
             send(msg)
             sent.add(sym)
 
         time.sleep(60)
 
     except Exception as e:
-        print("LOOP HATA:", e)
+        print("HATA:", e)
         time.sleep(30)
