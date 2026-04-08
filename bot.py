@@ -14,20 +14,19 @@ def send(msg):
     except Exception as e:
         print("Telegram hata:", e)
 
-# 🔁 tekrar kontrol
 sent = {}
-
-# 🗓 günlük reset
+volume_cache = {}
 last_reset_day = datetime.utcnow().date()
 
-# 📊 hacim cache
-volume_cache = {}
+def safe_float(val):
+    try:
+        return float(str(val).replace("%", "").replace(",", ""))
+    except:
+        return 0.0
 
-# 🧠 AI SKOR
 def ai_score(change, vol_ratio):
     score = 0
 
-    # 📈 fiyat etkisi
     if change > 1:
         score += 10
     if change > 3:
@@ -35,7 +34,6 @@ def ai_score(change, vol_ratio):
     if change > 5:
         score += 30
 
-    # 📊 hacim etkisi
     if vol_ratio > 1.5:
         score += 20
     if vol_ratio > 2:
@@ -45,7 +43,6 @@ def ai_score(change, vol_ratio):
 
     return min(score, 100)
 
-# 📊 pump ihtimali
 def pump_probability(score):
     return min(100, int(score * 1.2))
 
@@ -57,7 +54,7 @@ def fetch_data():
             r = requests.get(url, timeout=20)
 
             if r.status_code == 429:
-                print("Rate limit, bekleniyor...")
+                print("Rate limit bekleniyor...")
                 time.sleep(120)
                 continue
 
@@ -71,6 +68,7 @@ def fetch_data():
 
 last_heartbeat = datetime.utcnow()
 started = False
+first_cycle = True  # 🔥 kritik
 
 while True:
     try:
@@ -78,7 +76,7 @@ while True:
 
         # 🚀 başlangıç
         if not started:
-            send("🚀 AI VOLUME SCANNER AKTİF")
+            send("🚀 AI VOLUME SCANNER AKTİF (FIXED)")
             started = True
 
         # 🟢 heartbeat
@@ -96,18 +94,28 @@ while True:
 
         data = fetch_data()
 
+        print("Veri sayısı:", len(data))  # 🔥 debug
+
         for stock in data:
             try:
                 symbol = stock.get("symbol")
                 volume = stock.get("volume", 0)
-                change = stock.get("changesPercentage", 0)
+                change = safe_float(stock.get("changesPercentage", 0))
 
                 if not symbol or volume == 0:
                     continue
 
-                prev_vol = volume_cache.get(symbol, volume)
+                prev_vol = volume_cache.get(symbol)
 
-                vol_ratio = volume / prev_vol if prev_vol > 0 else 1
+                # 🔥 İLK TURDA SADECE CACHE DOLDUR
+                if first_cycle:
+                    volume_cache[symbol] = volume
+                    continue
+
+                if prev_vol and prev_vol > 0:
+                    vol_ratio = volume / prev_vol
+                else:
+                    vol_ratio = 1
 
                 volume_cache[symbol] = volume
 
@@ -117,12 +125,12 @@ while True:
                     if now_ts - sent[symbol] < 1800:
                         continue
 
-                # 🧠 AI hesap
                 score = ai_score(change, vol_ratio)
                 prob = pump_probability(score)
 
-                # 🔥 sinyal
-                if score >= 0:
+                print(symbol, "chg:", change, "volx:", round(vol_ratio,2), "score:", score)
+
+                if score >= 40:
                     msg = f"""🚨 AI SIGNAL
 💰 ${symbol}
 🧠 Skor: {score}/100
@@ -136,9 +144,10 @@ while True:
             except:
                 continue
 
+        first_cycle = False  # 🔥 ilk tur bitti
+
         time.sleep(120)
 
     except Exception as e:
         print("GENEL HATA:", e)
         time.sleep(30)
-        
