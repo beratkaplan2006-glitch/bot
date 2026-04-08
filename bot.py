@@ -94,7 +94,7 @@ while True:
             send(msg)
             sent.add(sym)
 
-        time.sleep(60)
+        time.sleep(90)
 
     except Exception as e:
         print("LOOP HATA:", e)
