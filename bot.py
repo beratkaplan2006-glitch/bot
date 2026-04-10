@@ -18,30 +18,6 @@ def send(msg):
     except:
         pass
 
-def get_gainers():
-    url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={API_KEY}"
-    try:
-        return requests.get(url).json()
-    except:
-        return []
-
-def get_float(symbol):
-    try:
-        url = f"https://financialmodelingprep.com/api/v4/shares_float?symbol={symbol}&apikey={API_KEY}"
-        data = requests.get(url).json()
-        return float(data[0]["floatShares"])
-    except:
-        return None
-
-def get_news(symbol):
-    try:
-        url = f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol}&limit=5&apikey={API_KEY}"
-        data = requests.get(url).json()
-        text = " ".join([n["title"].lower() for n in data])
-        return text
-    except:
-        return ""
-
 def analyze_news(text):
     score = 0
     for w in GOOD_NEWS:
@@ -61,10 +37,19 @@ def detect_setup(change, volume):
         return "⚡ MOMENTUM"
 
 def main():
-    send("🚀 PRO BOT AKTİF (v3)")
+    # ✅ TEST MESAJI
+    send("🧪 TEST MESAJI - BOT ÇALIŞIYOR")
+    send("🚀 PRO BOT AKTİF (v3 TEST)")
 
     while True:
-        stocks = get_gainers()
+
+        # ✅ SAHTE TEST VERİSİ (ZORLA SİNYAL)
+        stocks = [{
+            "symbol": "TEST",
+            "price": "2.5",
+            "changesPercentage": "25%",
+            "volume": "2000000"
+        }]
 
         for s in stocks:
             try:
@@ -73,31 +58,18 @@ def main():
                 change = float(s["changesPercentage"].replace("%",""))
                 volume = float(s["volume"])
 
-                # ANA FİLTRE
-                if not (0.5 < price < 10 and change > 10 and volume > 1_000_000):
-                    continue
-
-                # SPAM ENGEL
                 now = time.time()
                 if symbol in seen and now - seen[symbol] < 1800:
                     continue
 
-                # FLOAT
-                float_val = get_float(symbol)
-                if float_val is None or float_val > 20_000_000:
-                    continue
-
-                # NEWS
-                news_text = get_news(symbol)
-                news_score = analyze_news(news_text)
-
-                if news_score < 0:
-                    continue
+                # Fake float + news (test için)
+                float_val = 10_000_000
+                news_score = 1
 
                 setup = detect_setup(change, volume)
 
                 msg = f"""
-🚀 PRO SIGNAL
+🚀 TEST SIGNAL
 
 Ticker: {symbol}
 Price: {price}
@@ -112,11 +84,9 @@ News Score: {news_score}
                 send(msg)
                 seen[symbol] = now
 
-                time.sleep(0.7)
-
             except:
                 continue
 
-        time.sleep(120)
+        time.sleep(60)
 
 main()
