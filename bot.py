@@ -1,201 +1,112 @@
 import requests
 import time
-import os
-from datetime import datetime, timedelta
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
-FMP_KEY = os.getenv("API_KEY")
-POLYGON_KEY = os.getenv("POLYGON_KEY")
+API_KEY = "FMP_API_KEY"
+TELEGRAM_TOKEN = "TELEGRAM_BOT_TOKEN"
+CHAT_ID = "CHAT_ID"
 
-def send(msg):
+sent = set()
+
+GOOD_KEYWORDS = ["ai", "contract", "fda", "partnership", "award", "earnings"]
+BAD_KEYWORDS = ["offering", "dilution", "bankruptcy", "shelf"]
+
+def send_telegram(msg):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    data = {"chat_id": CHAT_ID, "text": msg}
+    requests.post(url, data=data)
+
+def get_gainers():
+    url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={API_KEY}"
+    return requests.get(url).json()
+
+def get_float(symbol):
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=10)
+        url = f"https://financialmodelingprep.com/api/v4/shares_float?symbol={symbol}&apikey={API_KEY}"
+        data = requests.get(url).json()
+        return float(data[0]["floatShares"])
     except:
-        pass
+        return None
 
-sent = {}
-volume_cache = {}
-last_reset_day = datetime.utcnow().date()
-
-def safe_float(val):
+def get_news(symbol):
     try:
-        return float(str(val).replace("%","").replace(",",""))
+        url = f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol}&limit=5&apikey={API_KEY}"
+        data = requests.get(url).json()
+        texts = " ".join([n["title"].lower() for n in data])
+        return texts
     except:
-        return 0.0
+        return ""
 
-def ai_score(change, vol_ratio):
+def news_score(text):
     score = 0
-    if change > 1: score += 10
-    if change > 3: score += 20
-    if change > 5: score += 30
-    if vol_ratio > 1.5: score += 20
-    if vol_ratio > 2: score += 30
-    if vol_ratio > 3: score += 40
-    return min(score, 100)
+    for word in GOOD_KEYWORDS:
+        if word in text:
+            score += 1
+    for word in BAD_KEYWORDS:
+        if word in text:
+            score -= 2
+    return score
 
-def pump_probability(score):
-    return min(100, int(score * 1.2))
+def detect_setup(change, volume):
+    if change > 20 and volume > 2_000_000:
+        return "🔥 BREAKOUT"
+    elif change > 10:
+        return "⚡ MOMENTUM"
+    else:
+        return "👀 WATCH"
 
-# 🔥 FMP
-def fetch_fmp():
-    try:
-        url = f"https://financialmodelingprep.com/api/v3/stock_market/actives?apikey={FMP_KEY}"
-        r = requests.get(url, timeout=10)
-        return r.json() if r.status_code == 200 else []
-    except:
-        return []
+def main():
+    while True:
+        stocks = get_gainers()
 
-# 🔥 Yahoo
-def fetch_yahoo():
-    try:
-        url = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=25&scrIds=day_gainers"
-        r = requests.get(url, timeout=10)
-        data = r.json()
-        return data["finance"]["result"][0]["quotes"]
-    except:
-        return []
-
-# 🔥 Polygon (EN ÖNEMLİ)
-def fetch_polygon():
-    try:
-        url = f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers?apiKey={POLYGON_KEY}"
-        r = requests.get(url, timeout=10)
-        data = r.json()
-        return data.get("tickers", [])
-    except:
-        return []
-
-last_heartbeat = datetime.utcnow()
-started = False
-first_cycle = True
-
-while True:
-    try:
-        now = datetime.utcnow()
-
-        if not started:
-            send("🚀 ULTRA SCANNER AKTİF (ULTIMATE)")
-            started = True
-
-        if now - last_heartbeat >= timedelta(minutes=60):
-            send("🟢 BOT AKTİF")
-            last_heartbeat = now
-
-        # reset
-        if datetime.utcnow().date() != last_reset_day:
-            sent.clear()
-            volume_cache.clear()
-            last_reset_day = datetime.utcnow().date()
-
-        stocks = []
-
-        # 🔥 1. FMP
-        fmp = fetch_fmp()
-        print("FMP:", len(fmp))
-
-        # 🔥 2. Yahoo
-        yahoo = fetch_yahoo()
-        print("Yahoo:", len(yahoo))
-
-        # 🔥 3. Polygon
-        polygon = fetch_polygon()
-        print("Polygon:", len(polygon))
-
-        # FMP ekle
-        for s in fmp:
-            stocks.append({
-                "symbol": s.get("symbol"),
-                "volume": s.get("volume", 0),
-                "change": safe_float(s.get("changesPercentage", 0))
-            })
-
-        # Yahoo ekle
-        for s in yahoo:
-            stocks.append({
-                "symbol": s.get("symbol"),
-                "volume": s.get("regularMarketVolume", 0),
-                "change": safe_float(s.get("regularMarketChangePercent", 0))
-            })
-
-        # Polygon ekle
-        for s in polygon:
-            stocks.append({
-                "symbol": s.get("ticker"),
-                "volume": s.get("day", {}).get("v", 0),
-                "change": safe_float(s.get("todaysChangePerc", 0))
-            })
-
-        print("Toplam:", len(stocks))
-
-        for stock in stocks:
+        for s in stocks:
             try:
-                symbol = stock["symbol"]
-                volume = stock["volume"]
-                change = stock["change"]
+                symbol = s["symbol"]
+                price = float(s["price"])
+                change = float(s["changesPercentage"].replace("%",""))
+                volume = float(s["volume"])
 
-                if not symbol or volume == 0:
+                if symbol in sent:
                     continue
 
-                prev_vol = volume_cache.get(symbol)
-
-                if first_cycle:
-                    volume_cache[symbol] = volume
+                # Ana filtre
+                if not (0.5 < price < 10 and change > 10 and volume > 1_000_000):
                     continue
 
-                vol_ratio = volume / prev_vol if prev_vol else 1
-                volume_cache[symbol] = volume
-
-                now_ts = time.time()
-
-                if symbol in sent and now_ts - sent[symbol] < 1800:
+                # Float
+                float_val = get_float(symbol)
+                if float_val is None or float_val > 20_000_000:
                     continue
 
-                score = ai_score(change, vol_ratio)
-                prob = pump_probability(score)
+                # News
+                news_text = get_news(symbol)
+                score = news_score(news_text)
 
-                if score >= 40:
-                    send(f"""🚨 AI SIGNAL
-💰 ${symbol}
-🧠 {score}/100
-📊 Pump %{prob}
-📊 Vol x{round(vol_ratio,2)}
-📈 %{round(change,2)}
-""")
-                    sent[symbol] = now_ts
+                if score < 0:
+                    continue
+
+                setup = detect_setup(change, volume)
+
+                msg = f"""
+🚀 STOCK ALERT
+
+Ticker: {symbol}
+Price: {price}
+Change: %{change}
+Volume: {volume}
+
+Float: {int(float_val)}
+Setup: {setup}
+News Score: {score}
+"""
+
+                send_telegram(msg)
+                sent.add(symbol)
+
+                time.sleep(1)
 
             except:
                 continue
 
-        first_cycle = False
-        time.sleep(120)
+        time.sleep(180)
 
-    except Exception as e:
-        print("HATA:", e)
-        time.sleep(30)
-        
-        import requests
-import os
-
-FMP_KEY = os.getenv("API_KEY")
-POLYGON_KEY = os.getenv("POLYGON_KEY")
-
-print("FMP KEY:", FMP_KEY)
-print("POLYGON KEY:", POLYGON_KEY)
-
-# FMP test
-try:
-    r = requests.get(f"https://financialmodelingprep.com/api/v3/stock_market/actives?apikey={FMP_KEY}")
-    print("FMP status:", r.status_code)
-    print("FMP data:", r.text[:200])
-except Exception as e:
-    print("FMP error:", e)
-
-# Polygon test
-try:
-    r = requests.get(f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers?apiKey={POLYGON_KEY}")
-    print("Polygon status:", r.status_code)
-    print("Polygon data:", r.text[:200])
-except Exception as e:
-    print("Polygon error:", e)
+main()
