@@ -6,39 +6,40 @@ API_KEY = os.getenv("API_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-seen = {}
+seen = set()
 
 GOOD_NEWS = ["ai", "contract", "fda", "partnership", "award", "earnings"]
 BAD_NEWS = ["offering", "dilution", "bankruptcy", "shelf"]
 
 def send(msg):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
-    except:
-        pass
+    except Exception as e:
+        print("Telegram hata:", e)
 
 def get_gainers():
-    url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={API_KEY}"
     try:
-        return requests.get(url).json()
-    except:
+        url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={API_KEY}"
+        res = requests.get(url, timeout=10)
+        return res.json()
+    except Exception as e:
+        print("Gainers hata:", e)
         return []
 
 def get_float(symbol):
     try:
         url = f"https://financialmodelingprep.com/api/v4/shares_float?symbol={symbol}&apikey={API_KEY}"
-        data = requests.get(url).json()
-        return float(data[0]["floatShares"])
+        res = requests.get(url, timeout=10).json()
+        return float(res[0]["floatShares"])
     except:
         return None
 
 def get_news(symbol):
     try:
         url = f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol}&limit=5&apikey={API_KEY}"
-        data = requests.get(url).json()
-        text = " ".join([n["title"].lower() for n in data])
-        return text
+        res = requests.get(url, timeout=10).json()
+        return " ".join([n["title"].lower() for n in res])
     except:
         return ""
 
@@ -61,43 +62,46 @@ def detect_setup(change, volume):
         return "⚡ MOMENTUM"
 
 def main():
-    send("🚀 PRO BOT AKTİF (CANLI)")
+    print("BOT BAŞLADI")  # log için
+    send("🚀 PRO BOT AKTİF (STABLE)")
 
     while True:
-        stocks = get_gainers()  # ✅ GERÇEK VERİ
+        try:
+            stocks = get_gainers()
 
-        for s in stocks:
-            try:
-                symbol = s["symbol"]
-                price = float(s["price"])
-                change = float(s["changesPercentage"].replace("%",""))
-                volume = float(s["volume"])
+            for s in stocks:
+                try:
+                    symbol = s.get("symbol")
+                    price = float(s.get("price", 0))
+                    change = float(str(s.get("changesPercentage", "0")).replace("%", ""))
+                    volume = float(s.get("volume", 0))
 
-                # ANA FİLTRE
-                if not (0.5 < price < 10 and change > 10 and volume > 1_000_000):
-                    continue
+                    if not symbol:
+                        continue
 
-                # SPAM ENGEL (30 dk)
-                now = time.time()
-                if symbol in seen and now - seen[symbol] < 1800:
-                    continue
+                    # ANA FİLTRE
+                    if not (0.5 < price < 10 and change > 10 and volume > 1_000_000):
+                        continue
 
-                # FLOAT FİLTRE
-                float_val = get_float(symbol)
-                if float_val is None or float_val > 20_000_000:
-                    continue
+                    # SPAM ENGEL
+                    if symbol in seen:
+                        continue
 
-                # NEWS FİLTRE
-                news_text = get_news(symbol)
-                news_score = analyze_news(news_text)
+                    # FLOAT
+                    float_val = get_float(symbol)
+                    if float_val is None or float_val > 20_000_000:
+                        continue
 
-                if news_score < 0:
-                    continue
+                    # NEWS
+                    news_text = get_news(symbol)
+                    news_score = analyze_news(news_text)
 
-                # SETUP
-                setup = detect_setup(change, volume)
+                    if news_score < 0:
+                        continue
 
-                msg = f"""
+                    setup = detect_setup(change, volume)
+
+                    msg = f"""
 🚀 PRO SIGNAL
 
 Ticker: {symbol}
@@ -110,14 +114,19 @@ Setup: {setup}
 News Score: {news_score}
 """
 
-                send(msg)
-                seen[symbol] = now
+                    send(msg)
+                    seen.add(symbol)
 
-                time.sleep(0.5)
+                    time.sleep(0.5)
 
-            except:
-                continue
+                except Exception as e:
+                    print("Hisse hata:", e)
+                    continue
 
-        time.sleep(120)
+            time.sleep(120)
+
+        except Exception as e:
+            print("MAIN LOOP HATA:", e)
+            time.sleep(30)
 
 main()
