@@ -2,90 +2,33 @@ import requests
 import time
 import os
 
-API_KEY = os.getenv("API_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
 seen = set()
 
-GOOD_NEWS = ["ai", "contract", "fda", "partnership", "award", "earnings"]
-BAD_NEWS = ["offering", "dilution", "bankruptcy", "shelf"]
-
 def send(msg):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
-    except Exception as e:
-        print("Telegram hata:", e)
+    except:
+        pass
 
 def get_gainers():
     try:
-        url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={API_KEY}"
-        res = requests.get(url, timeout=10)
-        data = res.json()
+        url = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=50&scrIds=day_gainers"
+        data = requests.get(url, timeout=10).json()
 
-        # API bazen string/dict döner → engelle
-        if not isinstance(data, list):
-            print("API yanlış veri:", data)
-            return []
-
-        return data
+        quotes = data["finance"]["result"][0]["quotes"]
+        return quotes
 
     except Exception as e:
-        print("Gainers hata:", e)
+        print("Yahoo hata:", e)
         return []
-
-def get_float(symbol):
-    try:
-        url = f"https://financialmodelingprep.com/api/v4/shares_float?symbol={symbol}&apikey={API_KEY}"
-        res = requests.get(url, timeout=10)
-        data = res.json()
-
-        if isinstance(data, list) and len(data) > 0:
-            return float(data[0].get("floatShares", 0))
-
-        return None
-
-    except Exception as e:
-        print("Float hata:", e)
-        return None
-
-def get_news(symbol):
-    try:
-        url = f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol}&limit=5&apikey={API_KEY}"
-        res = requests.get(url, timeout=10)
-        data = res.json()
-
-        if not isinstance(data, list):
-            return ""
-
-        return " ".join([str(n.get("title", "")).lower() for n in data])
-
-    except Exception as e:
-        print("News hata:", e)
-        return ""
-
-def analyze_news(text):
-    score = 0
-    for w in GOOD_NEWS:
-        if w in text:
-            score += 1
-    for w in BAD_NEWS:
-        if w in text:
-            score -= 2
-    return score
-
-def detect_setup(change, volume):
-    if change > 30 and volume > 2_000_000:
-        return "💣 SQUEEZE"
-    elif change > 15:
-        return "🔥 BREAKOUT"
-    else:
-        return "⚡ MOMENTUM"
 
 def main():
     print("BOT BAŞLADI")
-    send("🚀 PRO BOT AKTİF (FINAL)")
+    send("🚀 FREE SYSTEM AKTİF")
 
     while True:
         try:
@@ -93,66 +36,46 @@ def main():
 
             for s in stocks:
                 try:
-                    # dict değilse atla
-                    if not isinstance(s, dict):
-                        continue
-
                     symbol = s.get("symbol")
-                    price = float(s.get("price", 0))
-                    change = float(str(s.get("changesPercentage", "0")).replace("%", ""))
-                    volume = float(s.get("volume", 0))
+                    price = s.get("regularMarketPrice", 0)
+                    change = s.get("regularMarketChangePercent", 0)
+                    volume = s.get("regularMarketVolume", 0)
 
                     if not symbol:
                         continue
 
-                    # Ana filtre
-                    if not (0.5 < price < 10 and change > 10 and volume > 1_000_000):
+                    # 🔥 filtre
+                    if not (0.5 < price < 10):
                         continue
 
-                    # Spam engel
+                    if change < 5:
+                        continue
+
+                    if volume < 500000:
+                        continue
+
                     if symbol in seen:
                         continue
 
-                    # Float
-                    float_val = get_float(symbol)
-                    if float_val is None or float_val > 20_000_000:
-                        continue
-
-                    # News
-                    news_text = get_news(symbol)
-                    news_score = analyze_news(news_text)
-
-                    if news_score < 0:
-                        continue
-
-                    setup = detect_setup(change, volume)
-
                     msg = f"""
-🚀 PRO SIGNAL
+🚀 EARLY SIGNAL
 
 Ticker: {symbol}
 Price: {price}
-Change: %{change}
-Volume: {int(volume)}
-
-Float: {int(float_val)}
-Setup: {setup}
-News Score: {news_score}
+Change: %{round(change,2)}
+Volume: {volume}
 """
 
                     send(msg)
                     seen.add(symbol)
 
-                    time.sleep(0.5)
-
-                except Exception as e:
-                    print("Hisse hata:", e)
+                except:
                     continue
 
-            time.sleep(120)
+            time.sleep(180)
 
         except Exception as e:
-            print("MAIN LOOP HATA:", e)
-            time.sleep(30)
+            print("MAIN HATA:", e)
+            time.sleep(60)
 
 main()
