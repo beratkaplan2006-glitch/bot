@@ -22,7 +22,15 @@ def get_gainers():
     try:
         url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={API_KEY}"
         res = requests.get(url, timeout=10)
-        return res.json()
+        data = res.json()
+
+        # API bazen string/dict döner → engelle
+        if not isinstance(data, list):
+            print("API yanlış veri:", data)
+            return []
+
+        return data
+
     except Exception as e:
         print("Gainers hata:", e)
         return []
@@ -30,17 +38,31 @@ def get_gainers():
 def get_float(symbol):
     try:
         url = f"https://financialmodelingprep.com/api/v4/shares_float?symbol={symbol}&apikey={API_KEY}"
-        res = requests.get(url, timeout=10).json()
-        return float(res[0]["floatShares"])
-    except:
+        res = requests.get(url, timeout=10)
+        data = res.json()
+
+        if isinstance(data, list) and len(data) > 0:
+            return float(data[0].get("floatShares", 0))
+
+        return None
+
+    except Exception as e:
+        print("Float hata:", e)
         return None
 
 def get_news(symbol):
     try:
         url = f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol}&limit=5&apikey={API_KEY}"
-        res = requests.get(url, timeout=10).json()
-        return " ".join([n["title"].lower() for n in res])
-    except:
+        res = requests.get(url, timeout=10)
+        data = res.json()
+
+        if not isinstance(data, list):
+            return ""
+
+        return " ".join([str(n.get("title", "")).lower() for n in data])
+
+    except Exception as e:
+        print("News hata:", e)
         return ""
 
 def analyze_news(text):
@@ -62,8 +84,8 @@ def detect_setup(change, volume):
         return "⚡ MOMENTUM"
 
 def main():
-    print("BOT BAŞLADI")  # log için
-    send("🚀 PRO BOT AKTİF (STABLE)")
+    print("BOT BAŞLADI")
+    send("🚀 PRO BOT AKTİF (FINAL)")
 
     while True:
         try:
@@ -71,6 +93,10 @@ def main():
 
             for s in stocks:
                 try:
+                    # dict değilse atla
+                    if not isinstance(s, dict):
+                        continue
+
                     symbol = s.get("symbol")
                     price = float(s.get("price", 0))
                     change = float(str(s.get("changesPercentage", "0")).replace("%", ""))
@@ -79,20 +105,20 @@ def main():
                     if not symbol:
                         continue
 
-                    # ANA FİLTRE
+                    # Ana filtre
                     if not (0.5 < price < 10 and change > 10 and volume > 1_000_000):
                         continue
 
-                    # SPAM ENGEL
+                    # Spam engel
                     if symbol in seen:
                         continue
 
-                    # FLOAT
+                    # Float
                     float_val = get_float(symbol)
                     if float_val is None or float_val > 20_000_000:
                         continue
 
-                    # NEWS
+                    # News
                     news_text = get_news(symbol)
                     news_score = analyze_news(news_text)
 
