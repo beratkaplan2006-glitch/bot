@@ -20,20 +20,47 @@ def send(msg):
 
 def get_gainers():
     try:
-        url = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=50&scrIds=day_gainers"
+        url = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=100&scrIds=day_gainers"
         res = requests.get(url, headers=headers, timeout=10)
         data = res.json()
 
-        quotes = data.get("finance", {}).get("result", [])[0].get("quotes", [])
-        return quotes
+        return data.get("finance", {}).get("result", [])[0].get("quotes", [])
 
     except Exception as e:
         print("Yahoo hata:", e)
         return []
 
+def is_good_stock(price, change, volume, symbol):
+    # 🔥 1. Fiyat filtresi (low float benzeri alan)
+    if not (0.5 < price < 10):
+        return False
+
+    # 🔥 2. ERKEN momentum (asıl fark)
+    if not (5 < change < 15):
+        return False
+
+    # 🔥 3. Hacim filtresi (patlama belirtisi)
+    if volume < 800000:
+        return False
+
+    # 🔥 4. Büyük hisseleri ele (basit blacklist)
+    big_caps = ["AAPL","TSLA","NIO","AMD","NVDA","MSFT","AMZN","META"]
+    if symbol in big_caps:
+        return False
+
+    return True
+
+def detect_setup(change, volume):
+    if change > 10 and volume > 2_000_000:
+        return "💣 EARLY SQUEEZE"
+    elif change > 7:
+        return "🔥 EARLY BREAKOUT"
+    else:
+        return "⚡ MOMENTUM BUILDING"
+
 def main():
     print("BOT BAŞLADI")
-    send("🚀 FREE BOT AKTİF (YAHOO FIX)")
+    send("🚀 SHARP BOT AKTİF (EARLY SYSTEM)")
 
     while True:
         try:
@@ -41,6 +68,9 @@ def main():
 
             for s in stocks:
                 try:
+                    if not isinstance(s, dict):
+                        continue
+
                     symbol = s.get("symbol")
                     price = s.get("regularMarketPrice", 0)
                     change = s.get("regularMarketChangePercent", 0)
@@ -49,31 +79,33 @@ def main():
                     if not symbol:
                         continue
 
-                    if not (0.5 < price < 10):
-                        continue
-
-                    if change < 5:
-                        continue
-
-                    if volume < 500000:
-                        continue
-
                     if symbol in seen:
                         continue
 
+                    # 💣 ANA FİLTRE
+                    if not is_good_stock(price, change, volume, symbol):
+                        continue
+
+                    setup = detect_setup(change, volume)
+
                     msg = f"""
-🚀 EARLY SIGNAL
+🚀 EARLY SIGNAL (SHARP)
 
 Ticker: {symbol}
 Price: {price}
 Change: %{round(change,2)}
 Volume: {volume}
+
+Setup: {setup}
 """
 
                     send(msg)
                     seen.add(symbol)
 
-                except:
+                    time.sleep(0.5)
+
+                except Exception as e:
+                    print("Hisse hata:", e)
                     continue
 
             time.sleep(180)
