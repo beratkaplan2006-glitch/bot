@@ -7,6 +7,10 @@ CHAT_ID = os.getenv("CHAT_ID")
 
 seen = set()
 
+headers = {
+    "User-Agent": "Mozilla/5.0"
+}
+
 def send(msg):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -17,9 +21,10 @@ def send(msg):
 def get_gainers():
     try:
         url = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=50&scrIds=day_gainers"
-        data = requests.get(url, timeout=10).json()
+        res = requests.get(url, headers=headers, timeout=10)
+        data = res.json()
 
-        quotes = data["finance"]["result"][0]["quotes"]
+        quotes = data.get("finance", {}).get("result", [])[0].get("quotes", [])
         return quotes
 
     except Exception as e:
@@ -28,7 +33,7 @@ def get_gainers():
 
 def main():
     print("BOT BAŞLADI")
-    send("🚀 FREE SYSTEM AKTİF")
+    send("🚀 FREE BOT AKTİF (YAHOO FIX)")
 
     while True:
         try:
@@ -44,7 +49,6 @@ def main():
                     if not symbol:
                         continue
 
-                    # 🔥 filtre
                     if not (0.5 < price < 10):
                         continue
 
