@@ -5,7 +5,7 @@ import os
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-seen = set()
+seen = {}
 
 headers = {
     "User-Agent": "Mozilla/5.0"
@@ -30,41 +30,40 @@ def get_gainers():
         print("Yahoo hata:", e)
         return []
 
-def is_good_stock(price, change, volume, symbol):
-    # 🔥 1. Fiyat filtresi (low float benzeri alan)
-    if not (0.5 < price < 10):
-        return False
+# 💣 RUNNER SKOR
+def calculate_score(price, change, volume):
+    score = 0
 
-    # 🔥 2. ERKEN momentum (asıl fark)
-    if not (5 < change < 15):
-        return False
+    # fiyat (ucuz = iyi)
+    if price < 5:
+        score += 2
+    elif price < 8:
+        score += 1
 
-    # 🔥 3. Hacim filtresi (patlama belirtisi)
-    if volume < 800000:
-        return False
+    # erken hareket
+    if 3 < change < 8:
+        score += 2
+    elif 8 <= change < 12:
+        score += 3
 
-    # 🔥 4. Büyük hisseleri ele (basit blacklist)
-    big_caps = ["AAPL","TSLA","NIO","AMD","NVDA","MSFT","AMZN","META"]
-    if symbol in big_caps:
-        return False
+    # hacim
+    if volume > 5_000_000:
+        score += 3
+    elif volume > 2_000_000:
+        score += 2
+    elif volume > 1_000_000:
+        score += 1
 
-    return True
-
-def detect_setup(change, volume):
-    if change > 10 and volume > 2_000_000:
-        return "💣 EARLY SQUEEZE"
-    elif change > 7:
-        return "🔥 EARLY BREAKOUT"
-    else:
-        return "⚡ MOMENTUM BUILDING"
+    return score
 
 def main():
-    print("BOT BAŞLADI")
-    send("🚀 SHARP BOT AKTİF (EARLY SYSTEM)")
+    print("RUNNER BOT BAŞLADI")
+    send("💣 RUNNER BOT AKTİF")
 
     while True:
         try:
             stocks = get_gainers()
+            now = time.time()
 
             for s in stocks:
                 try:
@@ -79,28 +78,54 @@ def main():
                     if not symbol:
                         continue
 
-                    if symbol in seen:
+                    # tekrar sinyal (30 dk)
+                    if symbol in seen and now - seen[symbol] < 1800:
                         continue
 
                     # 💣 ANA FİLTRE
-                    if not is_good_stock(price, change, volume, symbol):
+                    if not (0.3 < price < 8):
                         continue
 
-                    setup = detect_setup(change, volume)
+                    if not (3 < change < 12):
+                        continue
+
+                    if volume < 800000:
+                        continue
+
+                    # büyük hisseleri ele
+                    big_caps = ["AAPL","TSLA","NIO","AMD","NVDA","MSFT","AMZN","META","NOK"]
+                    if symbol in big_caps:
+                        continue
+
+                    # 💣 SKOR
+                    score = calculate_score(price, change, volume)
+
+                    # düşük skoru ele
+                    if score < 4:
+                        continue
+
+                    # setup
+                    if score >= 7:
+                        setup = "💣 HIGH PROB RUNNER"
+                    elif score >= 5:
+                        setup = "🔥 POTENTIAL RUNNER"
+                    else:
+                        setup = "⚡ EARLY MOVE"
 
                     msg = f"""
-🚀 EARLY SIGNAL (SHARP)
+💣 RUNNER ALERT
 
 Ticker: {symbol}
 Price: {price}
 Change: %{round(change,2)}
 Volume: {volume}
 
+Score: {score}/10
 Setup: {setup}
 """
 
                     send(msg)
-                    seen.add(symbol)
+                    seen[symbol] = now
 
                     time.sleep(0.5)
 
