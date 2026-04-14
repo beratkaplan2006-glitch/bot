@@ -9,8 +9,7 @@ headers = {
     "User-Agent": "Mozilla/5.0"
 }
 
-# 🧠 hafıza sistemi
-seen_stocks = {}  # {symbol: last_score}
+seen_stocks = {}
 
 def send(msg):
     try:
@@ -19,31 +18,55 @@ def send(msg):
     except:
         pass
 
-def get_gainers():
+def get_stocks():
     try:
-        url = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=100&scrIds=day_gainers"
+        url = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=100&scrIds=most_actives"
         res = requests.get(url, headers=headers, timeout=10)
         data = res.json()
         return data.get("finance", {}).get("result", [])[0].get("quotes", [])
     except:
         return []
 
+def is_runner_candidate(price, change, volume):
+    # 🎯 TradingView mantığına yakın filtre
+
+    # fiyat (low float proxy)
+    if not (0.5 < price < 10):
+        return False
+
+    # erken hareket
+    if not (3 < change < 15):
+        return False
+
+    # hacim (min)
+    if volume < 500000:
+        return False
+
+    return True
+
 def calculate_score(price, change, volume):
     score = 0
 
-    if price < 5:
+    # fiyat (low float etkisi)
+    if price < 3:
+        score += 3
+    elif price < 7:
         score += 2
-    elif price < 8:
+    else:
         score += 1
 
+    # change (momentum)
     if 5 < change < 10:
-        score += 2
+        score += 3
     elif change >= 10:
-        score += 3
+        score += 2
+    else:
+        score += 1
 
-    if volume > 5_000_000:
+    # hacim
+    if volume > 10_000_000:
         score += 3
-    elif volume > 2_000_000:
+    elif volume > 5_000_000:
         score += 2
     else:
         score += 1
@@ -52,18 +75,18 @@ def calculate_score(price, change, volume):
 
 def get_setup(score):
     if score >= 8:
-        return "💣 STRONG RUNNER"
+        return "💣 HIGH PROB RUNNER"
     elif score >= 6:
         return "🔥 POTENTIAL RUNNER"
     else:
         return "⚡ WEAK"
 
 def main():
-    print("BOT BAŞLADI")
-    send("🚀 SPAM FIX BOT AKTİF")
+    print("UPGRADE BOT BAŞLADI")
+    send("🚀 RUNNER SCANNER AKTİF (UPGRADE)")
 
     while True:
-        stocks = get_gainers()
+        stocks = get_stocks()
 
         for s in stocks:
             try:
@@ -78,15 +101,17 @@ def main():
                 if not symbol:
                     continue
 
+                if not is_runner_candidate(price, change, volume):
+                    continue
+
                 score = calculate_score(price, change, volume)
 
-                # 🎯 düşükleri at
                 if score < 6:
                     continue
 
                 last_score = seen_stocks.get(symbol)
 
-                # 🧠 1. ilk defa geliyorsa
+                # 🟢 ilk sinyal
                 if symbol not in seen_stocks:
                     seen_stocks[symbol] = score
 
@@ -103,7 +128,7 @@ Setup: {get_setup(score)}
 """
                     send(msg)
 
-                # 🔥 2. güçlenmişse tekrar at
+                # 🔥 güçlenme
                 elif score > last_score:
                     seen_stocks[symbol] = score
 
@@ -120,13 +145,11 @@ Setup: {get_setup(score)}
 """
                     send(msg)
 
-                # ❌ aynıysa hiçbir şey yapma
-
-                time.sleep(0.3)
+                time.sleep(0.2)
 
             except Exception as e:
                 print("Hisse hata:", e)
 
-        time.sleep(180)
+        time.sleep(120)
 
 main()
