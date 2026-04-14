@@ -5,11 +5,12 @@ import os
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-seen = {}
-
 headers = {
     "User-Agent": "Mozilla/5.0"
 }
+
+# 🧠 hafıza sistemi
+seen_stocks = {}  # {symbol: last_score}
 
 def send(msg):
     try:
@@ -23,97 +24,74 @@ def get_gainers():
         url = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=100&scrIds=day_gainers"
         res = requests.get(url, headers=headers, timeout=10)
         data = res.json()
-
         return data.get("finance", {}).get("result", [])[0].get("quotes", [])
-
-    except Exception as e:
-        print("Yahoo hata:", e)
+    except:
         return []
 
-# 💣 RUNNER SKOR
 def calculate_score(price, change, volume):
     score = 0
 
-    # fiyat (ucuz = iyi)
     if price < 5:
         score += 2
     elif price < 8:
         score += 1
 
-    # erken hareket
-    if 3 < change < 8:
+    if 5 < change < 10:
         score += 2
-    elif 8 <= change < 12:
+    elif change >= 10:
         score += 3
 
-    # hacim
     if volume > 5_000_000:
         score += 3
     elif volume > 2_000_000:
         score += 2
-    elif volume > 1_000_000:
+    else:
         score += 1
 
     return score
 
+def get_setup(score):
+    if score >= 8:
+        return "💣 STRONG RUNNER"
+    elif score >= 6:
+        return "🔥 POTENTIAL RUNNER"
+    else:
+        return "⚡ WEAK"
+
 def main():
-    print("RUNNER BOT BAŞLADI")
-    send("💣 RUNNER BOT AKTİF")
+    print("BOT BAŞLADI")
+    send("🚀 SPAM FIX BOT AKTİF")
 
     while True:
-        try:
-            stocks = get_gainers()
-            now = time.time()
+        stocks = get_gainers()
 
-            for s in stocks:
-                try:
-                    if not isinstance(s, dict):
-                        continue
+        for s in stocks:
+            try:
+                if not isinstance(s, dict):
+                    continue
 
-                    symbol = s.get("symbol")
-                    price = s.get("regularMarketPrice", 0)
-                    change = s.get("regularMarketChangePercent", 0)
-                    volume = s.get("regularMarketVolume", 0)
+                symbol = s.get("symbol")
+                price = s.get("regularMarketPrice", 0)
+                change = s.get("regularMarketChangePercent", 0)
+                volume = s.get("regularMarketVolume", 0)
 
-                    if not symbol:
-                        continue
+                if not symbol:
+                    continue
 
-                    # tekrar sinyal (30 dk)
-                    if symbol in seen and now - seen[symbol] < 1800:
-                        continue
+                score = calculate_score(price, change, volume)
 
-                    # 💣 ANA FİLTRE
-                    if not (0.3 < price < 8):
-                        continue
+                # 🎯 düşükleri at
+                if score < 6:
+                    continue
 
-                    if not (3 < change < 12):
-                        continue
+                last_score = seen_stocks.get(symbol)
 
-                    if volume < 800000:
-                        continue
-
-                    # büyük hisseleri ele
-                    big_caps = ["AAPL","TSLA","NIO","AMD","NVDA","MSFT","AMZN","META","NOK"]
-                    if symbol in big_caps:
-                        continue
-
-                    # 💣 SKOR
-                    score = calculate_score(price, change, volume)
-
-                    # düşük skoru ele
-                    if score < 4:
-                        continue
-
-                    # setup
-                    if score >= 7:
-                        setup = "💣 HIGH PROB RUNNER"
-                    elif score >= 5:
-                        setup = "🔥 POTENTIAL RUNNER"
-                    else:
-                        setup = "⚡ EARLY MOVE"
+                # 🧠 1. ilk defa geliyorsa
+                if symbol not in seen_stocks:
+                    seen_stocks[symbol] = score
 
                     msg = f"""
-💣 RUNNER ALERT
+🚀 RUNNER ALERT
 
 Ticker: {symbol}
 Price: {price}
@@ -121,22 +99,34 @@ Change: %{round(change,2)}
 Volume: {volume}
 
 Score: {score}/10
-Setup: {setup}
+Setup: {get_setup(score)}
 """
-
                     send(msg)
-                    seen[symbol] = now
 
-                    time.sleep(0.5)
+                # 🔥 2. güçlenmişse tekrar at
+                elif score > last_score:
+                    seen_stocks[symbol] = score
 
-                except Exception as e:
-                    print("Hisse hata:", e)
-                    continue
+                    msg = f"""
+📈 POWER UP
 
-            time.sleep(180)
+Ticker: {symbol}
+Price: {price}
+Change: %{round(change,2)}
+Volume: {volume}
 
-        except Exception as e:
-            print("MAIN HATA:", e)
-            time.sleep(60)
+Score: {score}/10 (ARTTI)
+Setup: {get_setup(score)}
+"""
+                    send(msg)
+
+                # ❌ aynıysa hiçbir şey yapma
+
+                time.sleep(0.3)
+
+            except Exception as e:
+                print("Hisse hata:", e)
+
+        time.sleep(180)
 
 main()
