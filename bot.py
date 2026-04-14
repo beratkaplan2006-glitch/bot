@@ -3,8 +3,10 @@ import time
 import re
 
 # ===== AYARLAR =====
-TELEGRAM_TOKEN = "BURAYA_BOT_TOKEN"
-CHAT_ID = "BURAYA_CHAT_ID"
+import os
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 
 # Takip edilecek hesaplar
 ACCOUNTS = [
