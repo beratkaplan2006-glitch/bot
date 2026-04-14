@@ -1,155 +1,79 @@
 import requests
 import time
-import os
+import re
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
+# ===== AYARLAR =====
+TELEGRAM_TOKEN = "BURAYA_BOT_TOKEN"
+CHAT_ID = "BURAYA_CHAT_ID"
 
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
+# Takip edilecek hesaplar
+ACCOUNTS = [
+    "Benzinga",
+    "unusual_whales",
+    "DeItaone",
+    "financialjuice"
+]
 
-seen_stocks = {}
+# Anahtar kelimeler
+KEYWORDS = [
+    "partnership", "deal", "agreement", "acquisition",
+    "merger", "AI", "crypto", "FDA", "approval",
+    "contract", "expansion", "earnings"
+]
 
-def send(msg):
+# Daha önce atılan tweetleri tut
+seen_tweets = set()
+
+# ===== TELEGRAM GÖNDER =====
+def send_telegram(msg):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    data = {"chat_id": CHAT_ID, "text": msg}
+    requests.post(url, data=data)
+
+# ===== TICKER BUL =====
+def extract_ticker(text):
+    matches = re.findall(r'\$[A-Z]{2,5}', text)
+    return matches
+
+# ===== TWEET ÇEK =====
+def get_tweets(username):
+    url = f"https://cdn.syndication.twimg.com/widgets/timelines/profile?screen_name={username}"
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+        r = requests.get(url)
+        data = r.json()
+        return data.get("body", "")
     except:
-        pass
+        return ""
 
-def get_stocks():
-    try:
-        url = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=100&scrIds=most_actives"
-        res = requests.get(url, headers=headers, timeout=10)
-        data = res.json()
-        return data.get("finance", {}).get("result", [])[0].get("quotes", [])
-    except:
-        return []
+# ===== ANA LOOP =====
+while True:
+    for account in ACCOUNTS:
+        content = get_tweets(account)
 
-def is_runner_candidate(price, change, volume):
-    # 🎯 TradingView mantığına yakın filtre
+        if not content:
+            continue
 
-    # fiyat (low float proxy)
-    if not (0.5 < price < 10):
-        return False
+        tweets = content.split("timeline-Tweet-text")
 
-    # erken hareket
-    if not (2 < change < 10):
-        return False
+        for tweet in tweets:
+            if tweet in seen_tweets:
+                continue
 
-    # hacim (min)
-    if volume < 300000:
-        return False
+            seen_tweets.add(tweet)
 
-    return True
+            # Keyword kontrol
+            if any(k.lower() in tweet.lower() for k in KEYWORDS):
 
-def calculate_score(price, change, volume):
-    score = 0
+                tickers = extract_ticker(tweet)
 
-    # fiyat (low float etkisi)
-    if price < 3:
-        score += 3
-    elif price < 7:
-        score += 2
-    else:
-        score += 1
+                msg = f"🚨 HABER YAKALANDI\n\nHesap: @{account}\n"
 
-    # change (momentum)
-    if 5 < change < 10:
-        score += 3
-    elif change >= 10:
-        score += 2
-    else:
-        score += 1
+                if tickers:
+                    msg += f"Hisse: {' '.join(tickers)}\n"
 
-    # hacim
-    if volume > 10_000_000:
-        score += 3
-    elif volume > 5_000_000:
-        score += 2
-    else:
-        score += 1
+                msg += f"\nTweet:\n{tweet[:300]}"
 
-    return score
+                send_telegram(msg)
+                print(msg)
 
-def get_setup(score):
-    if score >= 8:
-        return "💣 HIGH PROB RUNNER"
-    elif score >= 6:
-        return "🔥 POTENTIAL RUNNER"
-    else:
-        return "⚡ WEAK"
-
-def main():
-    print("UPGRADE BOT BAŞLADI")
-    send("🚀 RUNNER SCANNER AKTİF (UPGRADE)")
-
-    while True:
-        stocks = get_stocks()
-
-        for s in stocks:
-            try:
-                if not isinstance(s, dict):
-                    continue
-
-                symbol = s.get("symbol")
-                price = s.get("regularMarketPrice", 0)
-                change = s.get("regularMarketChangePercent", 0)
-                volume = s.get("regularMarketVolume", 0)
-
-                if not symbol:
-                    continue
-
-                if not is_runner_candidate(price, change, volume):
-                    continue
-
-                score = calculate_score(price, change, volume)
-
-                if score < 6:
-                    continue
-
-                last_score = seen_stocks.get(symbol)
-
-                # 🟢 ilk sinyal
-                if symbol not in seen_stocks:
-                    seen_stocks[symbol] = score
-
-                    msg = f"""
-🚀 RUNNER ALERT
-
-Ticker: {symbol}
-Price: {price}
-Change: %{round(change,2)}
-Volume: {volume}
-
-Score: {score}/10
-Setup: {get_setup(score)}
-"""
-                    send(msg)
-
-                # 🔥 güçlenme
-                elif score > last_score:
-                    seen_stocks[symbol] = score
-
-                    msg = f"""
-📈 POWER UP
-
-Ticker: {symbol}
-Price: {price}
-Change: %{round(change,2)}
-Volume: {volume}
-
-Score: {score}/10 (ARTTI)
-Setup: {get_setup(score)}
-"""
-                    send(msg)
-
-                time.sleep(0.2)
-
-            except Exception as e:
-                print("Hisse hata:", e)
-
-        time.sleep(120)
-
-main()
+    time.sleep(30)
