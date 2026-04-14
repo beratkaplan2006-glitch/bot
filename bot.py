@@ -35,11 +35,11 @@ def is_runner_candidate(price, change, volume):
         return False
 
     # erken hareket
-    if not (3 < change < 15):
+    if not (2 < change < 10):
         return False
 
     # hacim (min)
-    if volume < 500000:
+    if volume < 300000:
         return False
 
     return True
