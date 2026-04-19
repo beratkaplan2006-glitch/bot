@@ -1,14 +1,11 @@
 import requests
 import time
 import re
-
-# ===== AYARLAR =====
 import os
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# Takip edilecek hesaplar
 ACCOUNTS = [
     "Benzinga",
     "unusual_whales",
@@ -16,34 +13,47 @@ ACCOUNTS = [
     "financialjuice"
 ]
 
-# Anahtar kelimeler
 KEYWORDS = [
     "partnership", "deal", "agreement", "acquisition",
     "merger", "AI", "crypto", "FDA", "approval",
     "contract", "expansion", "earnings"
 ]
 
-# Daha önce atılan tweetleri tut
 seen_tweets = set()
 
-# ===== TELEGRAM GÖNDER =====
+# ===== TELEGRAM =====
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": msg}
-    requests.post(url, data=data)
+    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
-# ===== TICKER BUL =====
+# ===== TICKER =====
 def extract_ticker(text):
-    matches = re.findall(r'\$[A-Z]{2,5}', text)
-    return matches
+    return re.findall(r'\$[A-Z]{2,5}', text)
 
-# ===== TWEET ÇEK =====
+# ===== FİYAT + HACİM =====
+def check_stock(ticker):
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker[1:]}"
+        r = requests.get(url).json()
+
+        result = r["chart"]["result"][0]
+        meta = result["meta"]
+
+        price = meta["regularMarketPrice"]
+        prev = meta["chartPreviousClose"]
+        volume = meta["regularMarketVolume"]
+
+        change_pct = ((price - prev) / prev) * 100
+
+        return price, change_pct, volume
+    except:
+        return None, None, None
+
+# ===== TWEET =====
 def get_tweets(username):
     url = f"https://cdn.syndication.twimg.com/widgets/timelines/profile?screen_name={username}"
     try:
-        r = requests.get(url)
-        data = r.json()
-        return data.get("body", "")
+        return requests.get(url).json().get("body", "")
     except:
         return ""
 
@@ -51,10 +61,6 @@ def get_tweets(username):
 while True:
     for account in ACCOUNTS:
         content = get_tweets(account)
-
-        if not content:
-            continue
-
         tweets = content.split("timeline-Tweet-text")
 
         for tweet in tweets:
@@ -63,18 +69,39 @@ while True:
 
             seen_tweets.add(tweet)
 
-            # Keyword kontrol
-            if any(k.lower() in tweet.lower() for k in KEYWORDS):
+            if not any(k.lower() in tweet.lower() for k in KEYWORDS):
+                continue
 
-                tickers = extract_ticker(tweet)
+            tickers = extract_ticker(tweet)
+            if not tickers:
+                continue
 
-                msg = f"🚨 HABER YAKALANDI\n\nHesap: @{account}\n"
+            for ticker in tickers:
+                price, change, volume = check_stock(ticker)
 
-                if tickers:
-                    msg += f"Hisse: {' '.join(tickers)}\n"
+                if price is None:
+                    continue
 
-                msg += f"\nTweet:\n{tweet[:300]}"
+                # 🔥 FİLTRELER
+                if change < 3:   # %3 altı alma
+                    continue
 
+                if volume < 1_000_000:  # düşük hacim alma
+                    continue
+
+                msg = f"""
+🚀 FİLTRELİ SİNYAL
+
+Hesap: @{account}
+Hisse: {ticker}
+
+Fiyat: {price}
+Değişim: %{round(change,2)}
+Hacim: {volume}
+
+Tweet:
+{tweet[:200]}
+"""
                 send_telegram(msg)
                 print(msg)
 
